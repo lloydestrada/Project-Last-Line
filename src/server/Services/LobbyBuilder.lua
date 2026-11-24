@@ -8,8 +8,8 @@
 		LobbyBuilder.Config.Skyline   = true/false   -- ruined city backdrop outside the walls
 		LobbyBuilder.Config.ArrivalGate = true/false -- illuminated welcome arch and arrival details
 
-	Each station contains an invisible "<Name>_Trigger" part with the attribute
-	"StationId" so you can hook up your Create / Browser / Summon / Shop logic.
+	Each station and matchmaking bay contains an invisible "<Name>_Trigger" part with the
+	attribute "StationId" so you can hook up your lobby-creation / Summon / Shop logic.
 ]]
 
 local Workspace = game:GetService("Workspace")
@@ -42,6 +42,8 @@ local COLORS = {
 	White = Color3.fromRGB(235, 240, 245),
 	Hazard = Color3.fromRGB(235, 190, 40),
 	Warm = Color3.fromRGB(255, 225, 170),
+	Cyan = Color3.fromRGB(60, 200, 230),
+	Orange = Color3.fromRGB(240, 135, 55),
 }
 
 local NOFX = {
@@ -316,11 +318,16 @@ local function setupLighting()
 		end
 	end
 
-	Lighting.ClockTime = 19.5
-	Lighting.Brightness = 2
-	Lighting.Ambient = Color3.fromRGB(70, 78, 100)
-	Lighting.OutdoorAmbient = Color3.fromRGB(70, 80, 105)
-	Lighting.ExposureCompensation = 0.25
+	Lighting.ClockTime = 18.8
+	Lighting.Brightness = 1.55
+	Lighting.Ambient = Color3.fromRGB(58, 70, 92)
+	Lighting.OutdoorAmbient = Color3.fromRGB(66, 78, 104)
+	Lighting.ExposureCompensation = 0.05
+	Lighting.GlobalShadows = true
+	Lighting.ShadowSoftness = 0.35
+	Lighting.FogColor = Color3.fromRGB(54, 68, 94)
+	Lighting.FogStart = 150
+	Lighting.FogEnd = 620
 
 	local sky = Instance.new("Sky")
 	sky.Name = "LobbyFX_Sky"
@@ -340,16 +347,16 @@ local function setupLighting()
 
 	local bloom = Instance.new("BloomEffect")
 	bloom.Name = "LobbyFX_Bloom"
-	bloom.Intensity = 0.7
-	bloom.Size = 28
-	bloom.Threshold = 0.9
+	bloom.Intensity = 0.42
+	bloom.Size = 22
+	bloom.Threshold = 1.25
 	bloom.Parent = Lighting
 
 	local color = Instance.new("ColorCorrectionEffect")
 	color.Name = "LobbyFX_Color"
-	color.Contrast = 0.1
-	color.Saturation = 0.2
-	color.TintColor = Color3.fromRGB(230, 238, 255)
+	color.Contrast = 0.08
+	color.Saturation = 0.14
+	color.TintColor = Color3.fromRGB(238, 242, 250)
 	color.Parent = Lighting
 
 	local rays = Instance.new("SunRaysEffect")
@@ -638,6 +645,22 @@ local function buildHub(lobby)
 	local halo2 = makeRing(hub, "HaloInner", CFrame.new(0, 33, 0), 8, 28, 0.3, COLORS.White)
 	animate(halo2, -0.9)
 
+	-- structural crown: four armored buttresses make the hub read as a landmark
+	local crown = Instance.new("Model")
+	crown.Name = "CommandCrown"
+	crown.Parent = hub
+	for i = 0, 3 do
+		local a = math.rad(45 + i * 90)
+		local radial = CFrame.Angles(0, a, 0)
+		part(crown, "CrownFoot", Vector3.new(6, 1.2, 8), radial * CFrame.new(0, 1.65, 18), COLORS.Dark, Enum.Material.Metal)
+		part(crown, "CrownButtress", Vector3.new(4.2, 18, 5), radial * CFrame.new(0, 10.5, 18), COLORS.Metal, Enum.Material.Metal)
+		part(crown, "CrownCap", Vector3.new(5.4, 2.2, 6.2), radial * CFrame.new(0, 20.1, 18), COLORS.Wall, Enum.Material.Metal)
+		part(crown, "CrownStripe", Vector3.new(0.28, 14, 0.22), radial * CFrame.new(0, 10.8, 20.56), COLORS.Blue, Enum.Material.Neon, NOFX)
+		part(crown, "CrownBridge", Vector3.new(5, 1.1, 12), radial * CFrame.new(0, 19.5, 11.5), COLORS.Metal, Enum.Material.Metal)
+	end
+	makeRing(crown, "CrownRingOuter", CFrame.new(0, 21, 0), 18.5, 40, 0.45, COLORS.Blue, Enum.Material.Neon)
+	makeRing(crown, "CrownRingInner", CFrame.new(0, 20.5, 0), 14.5, 36, 0.22, COLORS.White, Enum.Material.Neon)
+
 	-- hanging sign facing the spawn side
 	makeSign(
 		lobby,
@@ -653,65 +676,6 @@ end
 --------------------------------------------------------------------------------
 -- Stations
 --------------------------------------------------------------------------------
-
-local function extraCreate(model, L, color, name)
-	disc(model, name .. "_HoloTable", 9, 2.2, L(0, 2.05, 3), COLORS.Metal, Enum.Material.Metal)
-	local tableGlow = disc(model, name .. "_HoloTableGlow", 9.3, 0.15, L(0, 3.2, 3), color, Enum.Material.Neon, NOFX)
-	addLight(tableGlow, color, 1.5, 22, 0.2, 2)
-
-	local holo = { Transparency = 0.25, CanCollide = false, CanQuery = false, CastShadow = false }
-	local house = Instance.new("Model")
-	house.Name = name .. "_HoloHouse"
-	house.Parent = model
-	part(house, "Body", Vector3.new(3, 2, 3), L(0, 5.6, 3), color, Enum.Material.ForceField, holo)
-	part(house, "RoofL", Vector3.new(2.9, 0.3, 3.4), L(-1.05, 7.3, 3) * CFrame.Angles(0, 0, math.rad(35)), color, Enum.Material.ForceField, holo)
-	part(house, "RoofR", Vector3.new(2.9, 0.3, 3.4), L(1.05, 7.3, 3) * CFrame.Angles(0, 0, math.rad(-35)), color, Enum.Material.ForceField, holo)
-	house.WorldPivot = L(0, 5.6, 3)
-	animate(house, 0.8, 0.25, 1.5)
-
-	local ring = makeRing(model, name .. "_HoloRing", L(0, 3.7, 3), 4.4, 28, 0.12, color)
-	animate(ring, -1)
-
-	sparkles(model, L(0, 4.5, 3), Vector3.new(6, 1, 6), color, 8, 2)
-end
-
-local function extraBrowser(model, L, color, name)
-	disc(model, name .. "_RadarBase", 8, 1.6, L(0, 1.75, 3), COLORS.Metal, Enum.Material.Metal)
-	disc(model, name .. "_RadarScreen", 7, 0.12, L(0, 2.61, 3), Color3.fromRGB(8, 24, 34), Enum.Material.SmoothPlastic)
-	makeRing(model, name .. "_RadarRing1", L(0, 2.72, 3), 1.6, 20, 0.1, color)
-	makeRing(model, name .. "_RadarRing2", L(0, 2.72, 3), 3, 28, 0.1, color)
-
-	local sweep = Instance.new("Model")
-	sweep.Name = name .. "_RadarSweep"
-	sweep.Parent = model
-	part(sweep, "Sweep", Vector3.new(3, 0.06, 0.12), L(1.5, 2.74, 3), color, Enum.Material.Neon, NOFX)
-	sweep.WorldPivot = L(0, 2.74, 3)
-	animate(sweep, -1.8)
-
-	for _ = 1, 5 do
-		local a = rng:NextNumber(0, math.pi * 2)
-		local r = rng:NextNumber(0.8, 2.8)
-		local blip = part(model, name .. "_Blip", Vector3.new(0.35, 0.35, 0.35), L(math.cos(a) * r, 2.78, 3 + math.sin(a) * r), COLORS.White, Enum.Material.Neon, NOFX)
-		blip.Shape = Enum.PartType.Ball
-	end
-
-	-- angled side monitors
-	local labels = { "LIVE LOBBIES", "SERVER LIST" }
-	for i, side in ipairs({ -1, 1 }) do
-		part(model, name .. "_MonitorPost", Vector3.new(0.5, 4.5, 0.5), L(side * 9, 3.2, 3), COLORS.Metal, Enum.Material.Metal)
-		makeSign(
-			model,
-			name .. "_Monitor",
-			L(side * 9, 6.2, 2.7) * CFrame.Angles(0, math.rad(side * 25), 0),
-			Vector3.new(6, 3.4, 0.4),
-			labels[i],
-			nil,
-			color
-		)
-	end
-
-	sparkles(model, L(0, 4, 3), Vector3.new(6, 1, 6), color, 6, 2)
-end
 
 local function extraSummon(model, L, color, name)
 	disc(model, name .. "_Pedestal", 8, 0.8, L(0, 1.3, 3), COLORS.Metal, Enum.Material.Metal)
@@ -791,24 +755,6 @@ local function extraShop(model, L, color, name)
 end
 
 local STATIONS = {
-	{
-		name = "CreateMatch",
-		pos = Vector3.new(-48, 0, -27),
-		title = "CREATE MATCH",
-		sub = "HOST A NEW GAME",
-		cta = "CREATE",
-		color = COLORS.Green,
-		extra = extraCreate,
-	},
-	{
-		name = "MatchBrowser",
-		pos = Vector3.new(48, 0, -27),
-		title = "MATCH BROWSER",
-		sub = "JOIN A LIVE MATCH",
-		cta = "BROWSE",
-		color = COLORS.Blue,
-		extra = extraBrowser,
-	},
 	{
 		name = "SummoningStation",
 		pos = Vector3.new(-48, 0, 40),
@@ -901,6 +847,470 @@ local function makeStation(lobby, def)
 	)
 	trigger.Transparency = 1
 	trigger:SetAttribute("StationId", name)
+end
+
+local function buildSectorArchitecture(lobby)
+	local architecture = Instance.new("Folder")
+	architecture.Name = "SectorArchitecture"
+	architecture.Parent = lobby
+
+	local sectorNames = {
+		SummoningStation = { code = "03", label = "RESEARCH", height = 18 },
+		ShopStation = { code = "04", label = "QUARTERMASTER", height = 14 },
+	}
+
+	for _, def in ipairs(STATIONS) do
+		local info = sectorNames[def.name]
+		local model = Instance.new("Model")
+		model.Name = def.name .. "_Bastion"
+		model.Parent = architecture
+		local base = CFrame.lookAt(def.pos, Vector3.new(0, def.pos.Y, 0))
+		local function L(x, y, z)
+			return base * CFrame.new(x, y, z)
+		end
+
+		part(model, "Facade", Vector3.new(34, 8, 2.4), L(0, 12.5, 18), COLORS.Wall, Enum.Material.Metal)
+		part(model, "FacadeInset", Vector3.new(29, 5.4, 0.35), L(0, 12.5, 16.72), COLORS.Dark, Enum.Material.Metal)
+		part(model, "FacadeTrim", Vector3.new(34.6, 0.32, 0.35), L(0, 16.45, 16.62), def.color, Enum.Material.Neon, NOFX)
+		makeSign(model, "SectorLabel", L(0, 12.6, 16.48), Vector3.new(25, 3.8, 0.25), info.code .. " / " .. info.label, nil, def.color)
+
+		for _, side in ipairs({ -1, 1 }) do
+			local x = side * 17.8
+			part(model, "BastionFoot", Vector3.new(6.4, 1.2, 7.4), L(x, 0.9, 16.5), COLORS.Dark, Enum.Material.Metal)
+			part(model, "BastionTower", Vector3.new(4.4, info.height, 5.2), L(x, info.height / 2 + 1.2, 17), COLORS.Metal, Enum.Material.Metal)
+			part(model, "BastionCrown", Vector3.new(6, 1.6, 6.8), L(x, info.height + 1.2, 17), COLORS.Wall, Enum.Material.Metal)
+			part(model, "BastionStripe", Vector3.new(0.3, info.height - 3, 0.28), L(x, info.height / 2 + 1.1, 14.25), def.color, Enum.Material.Neon, NOFX)
+			part(model, "CanopyBrace", Vector3.new(1.2, 1.2, 12), L(side * 12.8, 12.3, 10) * CFrame.Angles(0, math.rad(side * 12), 0), COLORS.Metal, Enum.Material.Metal)
+		end
+
+		for i = -3, 3 do
+			local x = i * 4.5
+			part(model, "RoofBlade", Vector3.new(2.2, 0.8, 13), L(x, 17.3 + math.abs(i) * 0.65, 13.5), (i % 2 == 0) and COLORS.Metal or COLORS.Wall, Enum.Material.Metal)
+			part(model, "RoofBladeGlow", Vector3.new(0.18, 0.18, 10.5), L(x + 1.05, 17.8 + math.abs(i) * 0.65, 13.2), def.color, Enum.Material.Neon, NOFX)
+		end
+
+		local beacon = part(model, "SectorBeacon", Vector3.new(0.8, 0.8, 0.8), L(0, 19.5, 18), COLORS.White, Enum.Material.Neon, NOFX)
+		beacon.Shape = Enum.PartType.Ball
+		addLight(beacon, def.color, 2.2, 28, 0.25, 1.8)
+	end
+end
+
+--------------------------------------------------------------------------------
+-- Matchmaking depot (north side): four truck bays, each with a lobby hangar
+--------------------------------------------------------------------------------
+
+local v3 = Vector3.new
+
+local DEPOT = {
+	backZ = -69.5, -- interior face of the north wall
+	mouthZ = -47.5, -- front opening of every hangar
+	pitch = 28, -- distance between bay centres
+	truckZ = -36.5, -- truck origin; trucks face south (+Z) toward the exit
+}
+
+local BAYS = {
+	{ name = "MatchBay1", label = "LOBBY 01", color = COLORS.Cyan, paint = Color3.fromRGB(44, 60, 78), roof = "radar" },
+	{ name = "MatchBay2", label = "LOBBY 02", color = COLORS.Green, paint = Color3.fromRGB(52, 68, 52), roof = "rack" },
+	{ name = "MatchBay3", label = "LOBBY 03", color = COLORS.Orange, paint = Color3.fromRGB(78, 62, 46), roof = "turret" },
+	{ name = "MatchBay4", label = "LOBBY 04", color = COLORS.Red, paint = Color3.fromRGB(70, 48, 54), roof = "antenna" },
+}
+
+local function surfaceLabel(part0, face, text, color, size)
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = face
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 40
+	gui.LightInfluence = 0.4
+	gui.Parent = part0
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = size or UDim2.fromScale(1, 1)
+	label.Text = text
+	label.TextColor3 = color
+	label.TextTransparency = 0.15
+	label.TextScaled = true
+	label.Font = Enum.Font.GothamBlack
+	label.Parent = gui
+	return label
+end
+
+-- Roof-mounted gear gives each truck its own silhouette
+local function buildTruckRoofGear(truck, L, def)
+	local color = def.color
+
+	if def.roof == "radar" then
+		disc(truck, "RadarMast", 1.2, 1.2, L(0, 9.1, 3), COLORS.Dark, Enum.Material.Metal)
+		local dish = Instance.new("Model")
+		dish.Name = "RadarDish"
+		dish.Parent = truck
+		local tilt = CFrame.Angles(math.rad(-28), 0, 0)
+		disc(dish, "DishPlate", 3.8, 0.25, L(0, 10.2, 3) * tilt, COLORS.Metal, Enum.Material.Metal)
+		disc(dish, "DishGlow", 3.2, 0.1, L(0, 10.2, 3) * tilt * CFrame.new(0, 0.18, 0), color, Enum.Material.Neon, NOFX)
+		rod(dish, "DishFeed", 1.8, 0.18, L(0, 10.9, 2.4) * tilt, COLORS.Metal, Enum.Material.Metal, NOFX)
+		dish.WorldPivot = L(0, 10.2, 3)
+		animate(dish, 0.9)
+	elseif def.roof == "rack" then
+		part(truck, "RackFrame", v3(7, 0.3, 10.6), L(0, 8.65, 2.9), COLORS.Dark, Enum.Material.Metal)
+		for i, z in ipairs({ -0.4, 3.4, 7 }) do
+			local x = (i % 2 == 0) and 1.6 or -1.6
+			part(truck, "RoofCrate", v3(2.6, 1.3, 2.6), L(x, 9.45, z), Color3.fromRGB(88, 100, 74), Enum.Material.WoodPlanks)
+			part(truck, "RoofCrateBand", v3(2.7, 0.2, 2.7), L(x, 9.45, z), color, Enum.Material.Neon, NOFX)
+		end
+	elseif def.roof == "turret" then
+		disc(truck, "TurretRing", 3.4, 0.5, L(0, 8.75, 3), COLORS.Dark, Enum.Material.Metal)
+		local head = Instance.new("Model")
+		head.Name = "RoofTurret"
+		head.Parent = truck
+		part(head, "Body", v3(2.4, 1.4, 2.8), L(0, 9.7, 3), COLORS.Wall, Enum.Material.Metal)
+		part(head, "Shield", v3(2.8, 1.6, 0.4), L(0, 9.8, 1.5), def.paint, Enum.Material.Metal)
+		for _, side in ipairs({ -1, 1 }) do
+			rod(head, "Barrel", 3.6, 0.5, L(side * 0.6, 9.8, 3) * CFrame.new(0, 0, -3.2), COLORS.Dark, Enum.Material.Metal)
+			part(head, "Muzzle", v3(0.45, 0.45, 0.2), L(side * 0.6, 9.8, 3) * CFrame.new(0, 0, -5.1), color, Enum.Material.Neon, NOFX)
+		end
+		head.WorldPivot = L(0, 9.7, 3)
+		animate(head, 0.45)
+	else
+		for i, mast in ipairs({ { -2.4, 3.2, 4.5 }, { 0, 2.2, 6 }, { 2.4, 4.6, 3.6 } }) do
+			disc(truck, "Mast", 0.25, mast[3], L(mast[1], 8.5 + mast[3] / 2, mast[2]), COLORS.Metal, Enum.Material.Metal)
+			local tip = part(truck, "MastTip", v3(0.5, 0.5, 0.5), L(mast[1], 8.5 + mast[3] + 0.2, mast[2]), COLORS.Red, Enum.Material.Neon, NOFX)
+			tip.Shape = Enum.PartType.Ball
+			if i == 2 then
+				addLight(tip, COLORS.Red, 1.4, 16, 0.6, 3)
+			end
+		end
+		part(truck, "MastArm", v3(4, 0.2, 0.2), L(0, 13.5, 2.2), COLORS.Metal, Enum.Material.Metal, NOFX)
+	end
+end
+
+-- Armoured box truck. Local -Z is the front, so `base` should face the exit.
+local function buildTruck(parent, base, def)
+	local color, paint = def.color, def.paint
+	local truck = Instance.new("Model")
+	truck.Name = def.name .. "_Truck"
+	truck.Parent = parent
+
+	local function L(x, y, z)
+		return base * CFrame.new(x, y, z)
+	end
+	local tire = Color3.fromRGB(18, 19, 22)
+	local glassProps = { Transparency = 0.3, CanCollide = false, CanQuery = false }
+	local glassColor = Color3.fromRGB(70, 110, 140)
+
+	-- chassis, underglow, wheels
+	part(truck, "Chassis", v3(6.6, 1, 17.4), L(0, 2.2, -0.3), COLORS.Dark, Enum.Material.Metal)
+	for _, side in ipairs({ -1, 1 }) do
+		part(truck, "Underglow", v3(0.2, 0.14, 15), L(side * 3.35, 1.85, 0.2), color, Enum.Material.Neon, NOFX)
+		part(truck, "Fender", v3(2.1, 0.4, 4.2), L(side * 3.8, 3.5, -6.2), paint, Enum.Material.Metal)
+		part(truck, "Fender", v3(2.1, 0.4, 8.4), L(side * 3.8, 3.5, 4.6), paint, Enum.Material.Metal)
+	end
+	for _, z in ipairs({ -6.2, 2.8, 6.4 }) do
+		for _, side in ipairs({ -1, 1 }) do
+			cyl(truck, "Wheel", v3(1.5, 3.2, 3.2), L(side * 3.7, 1.6, z), tire, Enum.Material.Rubber)
+			cyl(truck, "Hub", v3(0.2, 1.5, 1.5), L(side * 4.5, 1.6, z), color, Enum.Material.Neon, NOFX)
+		end
+	end
+
+	-- cab
+	part(truck, "Cab", v3(7.6, 4.8, 5.6), L(0, 5.1, -6.4), paint, Enum.Material.Metal)
+	part(truck, "CabRoof", v3(7.8, 0.35, 5.8), L(0, 7.65, -6.4), COLORS.Metal, Enum.Material.Metal)
+	part(truck, "Windshield", v3(6.4, 2.1, 0.25), L(0, 5.9, -9.25), glassColor, Enum.Material.Glass, glassProps)
+	for _, side in ipairs({ -1, 1 }) do
+		part(truck, "SideWindow", v3(0.25, 1.9, 2.8), L(side * 3.85, 5.9, -6.0), glassColor, Enum.Material.Glass, glassProps)
+		part(truck, "MirrorArm", v3(0.6, 0.15, 0.15), L(side * 4.1, 6.4, -8.6), COLORS.Dark, Enum.Material.Metal, NOFX)
+		part(truck, "Mirror", v3(0.3, 1, 0.5), L(side * 4.45, 6.1, -8.6), COLORS.Dark, Enum.Material.Metal, NOFX)
+		part(truck, "CabStripe", v3(0.12, 0.3, 5.4), L(side * 3.83, 3.7, -6.4), color, Enum.Material.Neon, NOFX)
+
+		local lamp = part(truck, "Headlight", v3(1.4, 0.8, 0.3), L(side * 3.0, 3.9, -9.35), COLORS.Warm, Enum.Material.Neon, NOFX)
+		local spot = Instance.new("SpotLight")
+		spot.Face = Enum.NormalId.Front
+		spot.Angle = 55
+		spot.Range = 26
+		spot.Brightness = 1.2
+		spot.Color = COLORS.Warm
+		spot.Shadows = false
+		spot.Parent = lamp
+	end
+	part(truck, "Grille", v3(4.4, 1.6, 0.3), L(0, 3.9, -9.35), COLORS.Dark, Enum.Material.Metal)
+	for _, y in ipairs({ 3.5, 3.9, 4.3 }) do
+		part(truck, "GrilleSlat", v3(4, 0.1, 0.1), L(0, y, -9.55), color, Enum.Material.Neon, NOFX)
+	end
+	part(truck, "FrontBumper", v3(7.8, 0.9, 0.9), L(0, 2.4, -9.4), COLORS.Dark, Enum.Material.Metal)
+	hazard(truck, L(0, 2.4, -9.88), 7.6, 0.7, 1.9)
+	part(truck, "LightBar", v3(5, 0.35, 0.5), L(0, 7.95, -8.4), color, Enum.Material.Neon, NOFX)
+
+	local beacon = part(truck, "CabBeacon", v3(0.7, 0.7, 0.7), L(0, 8.2, -5.4), COLORS.White, Enum.Material.Neon, NOFX)
+	beacon.Shape = Enum.PartType.Ball
+	addLight(beacon, color, 1.6, 22, 0.5, 2.6)
+
+	-- cargo box
+	part(truck, "CargoBox", v3(7.8, 5.8, 11.8), L(0, 5.6, 2.9), paint, Enum.Material.Metal)
+	part(truck, "CargoRoof", v3(8, 0.3, 12), L(0, 8.65, 2.9), COLORS.Metal, Enum.Material.Metal)
+	for _, z in ipairs({ -2.7, 0.8, 4.3, 8.5 }) do
+		part(truck, "BoxRib", v3(7.95, 6, 0.35), L(0, 5.6, z), COLORS.Metal, Enum.Material.Metal)
+	end
+	for _, side in ipairs({ -1, 1 }) do
+		for _, y in ipairs({ 7.9, 3.3 }) do
+			part(truck, "BoxStripe", v3(0.12, 0.35, 11.4), L(side * 3.93, y, 2.9), color, Enum.Material.Neon, NOFX)
+		end
+		local plate = part(truck, "BoxPlate", v3(0.12, 2.6, 8), L(side * 3.93, 5.6, 3.2), COLORS.Dark, Enum.Material.Metal, NOFX)
+		surfaceLabel(plate, (side == 1) and Enum.NormalId.Right or Enum.NormalId.Left, def.label, color, UDim2.fromScale(0.92, 0.5))
+	end
+
+	-- rear doors and tail lights face the hangar
+	part(truck, "RearDoors", v3(7.4, 5.2, 0.2), L(0, 5.5, 8.95), COLORS.Dark, Enum.Material.Metal)
+	part(truck, "RearSeam", v3(0.1, 5, 0.1), L(0, 5.5, 9.08), color, Enum.Material.Neon, NOFX)
+	for _, side in ipairs({ -1, 1 }) do
+		part(truck, "TailLight", v3(0.9, 0.5, 0.2), L(side * 3.0, 3.3, 9.05), COLORS.Red, Enum.Material.Neon, NOFX)
+	end
+	part(truck, "RearBumper", v3(7.8, 0.7, 0.7), L(0, 2.2, 9.2), COLORS.Dark, Enum.Material.Metal)
+	hazard(truck, L(0, 2.2, 9.57) * CFrame.Angles(0, math.pi, 0), 7.6, 0.6, 1.9)
+
+	buildTruckRoofGear(truck, L, def)
+	return truck
+end
+
+-- Square hangar behind the truck: the space where a player creates a lobby
+local function buildHangar(model, def, bx)
+	local name, color = def.name, def.color
+	local backZ, mouthZ = DEPOT.backZ, DEPOT.mouthZ
+	local depth = mouthZ - backZ
+	local midZ = (backZ + mouthZ) / 2
+
+	-- floor
+	part(model, name .. "_HangarFloor", v3(24, 0.3, depth), v3(bx, 0.15, midZ), COLORS.Dark, Enum.Material.Metal)
+	part(model, name .. "_HangarInlay", v3(22.4, 0.06, depth - 1.6), v3(bx, 0.33, midZ), COLORS.Floor, Enum.Material.DiamondPlate, NOFX)
+	for _, side in ipairs({ -1, 1 }) do
+		part(model, name .. "_FloorEdge", v3(0.3, 0.06, depth - 1), v3(bx + side * 11.6, 0.37, midZ), color, Enum.Material.Neon, NOFX)
+	end
+	part(model, name .. "_Threshold", v3(24, 0.06, 0.35), v3(bx, 0.37, mouthZ + 0.6), color, Enum.Material.Neon, NOFX)
+
+	-- roof, beams and lighting
+	part(model, name .. "_HangarRoof", v3(24, 1.2, depth), v3(bx, 14, midZ), COLORS.Wall, Enum.Material.Metal)
+	for _, side in ipairs({ -1, 1 }) do
+		part(model, name .. "_RoofBeam", v3(1, 0.8, depth), v3(bx + side * 6, 13, midZ), COLORS.Metal, Enum.Material.Metal)
+		part(model, name .. "_RoofStrip", v3(0.4, 0.12, depth - 3), v3(bx + side * 6, 12.55, midZ), COLORS.White, Enum.Material.Neon, NOFX)
+	end
+	local lamp = part(model, name .. "_HangarLamp", v3(3, 0.2, 3), v3(bx, 13.3, midZ), COLORS.Warm, Enum.Material.Neon, NOFX)
+	addLight(lamp, COLORS.Warm, 1.1, 30, 0.06, 1.4)
+
+	-- back wall with the bay's call sign
+	part(model, name .. "_BackWall", v3(23.6, 12.6, 0.4), v3(bx, 6.6, -68.6), COLORS.Panel, Enum.Material.Metal)
+	for _, side in ipairs({ -1, 1 }) do
+		part(model, name .. "_BackStrip", v3(0.25, 11, 0.2), v3(bx + side * 11.2, 6.6, -68.35), color, Enum.Material.Neon, NOFX)
+	end
+	makeSign(
+		model,
+		name .. "_BackSign",
+		CFrame.new(bx, 9.4, -68.3) * CFrame.Angles(0, math.pi, 0),
+		v3(16, 3.4, 0.3),
+		"CREATE LOBBY",
+		"STEP INTO THE RING TO HOST",
+		color
+	)
+
+	-- lobby terminal
+	part(model, name .. "_Console", v3(9, 2.4, 3), v3(bx, 1.5, -66.2), COLORS.Metal, Enum.Material.Metal)
+	part(model, name .. "_ConsoleTop", v3(9.6, 0.3, 3.6), v3(bx, 2.85, -66.2), COLORS.Wall, Enum.Material.Metal)
+	part(model, name .. "_ConsoleGlow", v3(9, 0.16, 0.12), v3(bx, 1.7, -64.65), color, Enum.Material.Neon, NOFX)
+	part(model, name .. "_TerminalStem", v3(1, 0.8, 0.8), v3(bx, 3.4, -66.5), COLORS.Dark, Enum.Material.Metal)
+	makeSign(
+		model,
+		name .. "_Terminal",
+		CFrame.new(bx, 4.5, -66.3) * CFrame.Angles(0, math.pi, 0) * CFrame.Angles(math.rad(15), 0, 0),
+		v3(6, 2.6, 0.25),
+		"HOST LOBBY",
+		"0 / 4 SQUAD",
+		color
+	)
+
+	-- lobby pad where the host stands
+	local padPos = v3(bx, 0.4, -58.5)
+	disc(model, name .. "_PadRing", 11, 0.08, padPos, color, Enum.Material.Neon, NOFX)
+	disc(model, name .. "_PadBase", 10.5, 0.1, padPos + v3(0, 0.01, 0), COLORS.Dark, Enum.Material.Metal, NOFX)
+	disc(model, name .. "_PadRingInner", 7, 0.1, padPos + v3(0, 0.02, 0), color, Enum.Material.Neon, NOFX)
+	local core = disc(model, name .. "_PadCore", 6.5, 0.12, padPos + v3(0, 0.03, 0), COLORS.Floor, Enum.Material.Metal, NOFX)
+	addLight(core, color, 1.2, 18, 0.2, 2)
+
+	local padLabel = part(model, name .. "_PadLabel", v3(5.4, 0.05, 1.5), v3(bx, 0.52, -54.6), COLORS.Dark, Enum.Material.SmoothPlastic, NOFX)
+	padLabel.Transparency = 1
+	surfaceLabel(padLabel, Enum.NormalId.Top, "HOST LOBBY", color)
+
+	-- four squad slots (MatchConfig.MAX_PLAYERS)
+	for _, x in ipairs({ -4.5, -1.5, 1.5, 4.5 }) do
+		disc(model, name .. "_SlotRing", 1.9, 0.06, v3(bx + x, 0.56, -63), color, Enum.Material.Neon, NOFX)
+		disc(model, name .. "_SlotCore", 1.5, 0.07, v3(bx + x, 0.57, -63), COLORS.Dark, Enum.Material.Metal, NOFX)
+	end
+
+	-- holographic lobby model on the left, supply crates on the right
+	local standPos = v3(bx - 8.2, 0, -65.5)
+	disc(model, name .. "_HoloStand", 4, 1.2, standPos + v3(0, 0.9, 0), COLORS.Metal, Enum.Material.Metal)
+	disc(model, name .. "_HoloStandGlow", 4.2, 0.12, standPos + v3(0, 1.55, 0), color, Enum.Material.Neon, NOFX)
+	local holo = { Transparency = 0.25, CanCollide = false, CanQuery = false, CastShadow = false }
+	local house = Instance.new("Model")
+	house.Name = name .. "_HoloHouse"
+	house.Parent = model
+	local housePos = standPos + v3(0, 3.4, 0)
+	part(house, "Body", v3(2.2, 1.5, 2.2), housePos, color, Enum.Material.ForceField, holo)
+	part(house, "RoofL", v3(1.7, 0.25, 2.6), CFrame.new(housePos + v3(-0.8, 1.1, 0)) * CFrame.Angles(0, 0, math.rad(35)), color, Enum.Material.ForceField, holo)
+	part(house, "RoofR", v3(1.7, 0.25, 2.6), CFrame.new(housePos + v3(0.8, 1.1, 0)) * CFrame.Angles(0, 0, math.rad(-35)), color, Enum.Material.ForceField, holo)
+	house.WorldPivot = CFrame.new(housePos)
+	animate(house, 0.8, 0.2, 1.5)
+
+	local cratePos = v3(bx + 8.2, 0, -65.8)
+	part(model, name .. "_SupplyCrate", v3(3.4, 2.7, 3.2), cratePos + v3(0, 1.65, 0), Color3.fromRGB(88, 100, 74), Enum.Material.WoodPlanks)
+	part(model, name .. "_SupplyCrate", v3(2.4, 1.6, 2.4), cratePos + v3(0, 3.8, 0) , Color3.fromRGB(78, 90, 66), Enum.Material.WoodPlanks)
+	for _, y in ipairs({ 1.65, 3.8 }) do
+		part(model, name .. "_CrateBand", v3(3.5, 0.2, 3.3), cratePos + v3(0, y, 0), color, Enum.Material.Neon, NOFX)
+	end
+
+	-- status boards on the side piers
+	for _, side in ipairs({ -1, 1 }) do
+		makeSign(
+			model,
+			name .. ((side == -1) and "_SquadBoard" or "_StatusBoard"),
+			CFrame.new(bx + side * 11.85, 8, -58.5) * CFrame.Angles(0, side * math.pi / 2, 0),
+			v3(9, 3.2, 0.25),
+			(side == -1) and "SQUAD 0 / 4" or "STATUS: OPEN",
+			(side == -1) and "WAITING FOR PLAYERS" or "LOBBY NOT STARTED",
+			color
+		)
+	end
+
+	sparkles(model, v3(bx, 1, -58.5), v3(8, 1, 8), color, 5, 2)
+end
+
+-- Open forecourt in front of the hangar where the truck is parked
+local function buildForecourt(model, def, bx)
+	local name, color = def.name, def.color
+	local frontZ = -24.5
+	local length = frontZ - DEPOT.mouthZ
+	local midZ = (frontZ + DEPOT.mouthZ) / 2
+
+	part(model, name .. "_Forecourt", v3(24, 0.14, length), v3(bx, 0.07, midZ), Color3.fromRGB(34, 38, 44), Enum.Material.Metal, NOFX)
+	for _, side in ipairs({ -1, 1 }) do
+		part(model, name .. "_CourtEdge", v3(0.3, 0.05, length), v3(bx + side * 11.7, 0.16, midZ), color, Enum.Material.Neon, NOFX)
+		-- bollards at the exit end
+		part(model, name .. "_Bollard", v3(0.7, 2.2, 0.7), v3(bx + side * 11.4, 1.1, frontZ + 0.5), COLORS.Metal, Enum.Material.Metal)
+		part(model, name .. "_BollardCap", v3(0.8, 0.25, 0.8), v3(bx + side * 11.4, 2.3, frontZ + 0.5), color, Enum.Material.Neon, NOFX)
+	end
+
+	-- hazard stop line at the exit end
+	for k = 0, 9 do
+		part(
+			model,
+			name .. "_StopLine",
+			v3(2.4, 0.05, 0.9),
+			v3(bx - 12 + (k + 0.5) * 2.4, 0.16, frontZ - 0.3),
+			(k % 2 == 0) and COLORS.Hazard or COLORS.Dark,
+			Enum.Material.Metal,
+			NOFX
+		)
+	end
+
+	-- exit chevrons on the left walkway, bay number on the right
+	local chevronPos = v3(bx - 8.2, 0.16, -32)
+	local chevronCF = CFrame.lookAt(chevronPos, chevronPos + v3(0, 0, 1))
+	for _, side in ipairs({ -1, 1 }) do
+		part(
+			model,
+			name .. "_ExitChevron",
+			v3(2.4, 0.05, 0.28),
+			chevronCF * CFrame.new(side * 0.6, 0, 0) * CFrame.Angles(0, side * math.rad(34), 0),
+			color,
+			Enum.Material.Neon,
+			NOFX
+		)
+	end
+	local number = part(model, name .. "_BayNumber", v3(5, 0.05, 3), v3(bx + 8.2, 0.17, -32), COLORS.Dark, Enum.Material.SmoothPlastic, NOFX)
+	number.Transparency = 1
+	surfaceLabel(number, Enum.NormalId.Top, string.format("%02d", tonumber(string.match(name, "%d+"))), color)
+end
+
+local function buildMatchBays(lobby)
+	local structure = Instance.new("Folder")
+	structure.Name = "MatchDepotStructure"
+	structure.Parent = lobby
+
+	local backZ, mouthZ = DEPOT.backZ, DEPOT.mouthZ
+	local depth = mouthZ - backZ
+	local midZ = (backZ + mouthZ) / 2
+	local count = #BAYS
+	local frontZ = mouthZ + 1
+
+	-- piers between and around the bays
+	for i = 0, count do
+		local px = (i - count / 2) * DEPOT.pitch
+		local leftDef, rightDef = BAYS[i], BAYS[i + 1]
+		local leftColor = (leftDef or rightDef).color
+		local rightColor = (rightDef or leftDef).color
+
+		part(structure, "Pier", v3(4, 15, depth + 1), v3(px, 7.5, midZ + 0.5), COLORS.Wall, Enum.Material.Metal)
+		part(structure, "PierPlate", v3(3.2, 13.5, 0.3), v3(px, 7.5, frontZ - 0.15), COLORS.Dark, Enum.Material.Metal)
+		part(structure, "PierStripe", v3(0.3, 12.5, 0.2), v3(px - 0.9, 7.5, frontZ + 0.05), leftColor, Enum.Material.Neon, NOFX)
+		part(structure, "PierStripe", v3(0.3, 12.5, 0.2), v3(px + 0.9, 7.5, frontZ + 0.05), rightColor, Enum.Material.Neon, NOFX)
+		part(structure, "PierCap", v3(5.2, 1, depth + 2), v3(px, 15.5, midZ + 0.5), COLORS.Metal, Enum.Material.Metal)
+		local beacon = part(structure, "PierBeacon", v3(0.9, 0.9, 0.9), v3(px, 16.4, frontZ + 0.5), COLORS.White, Enum.Material.Neon, NOFX)
+		beacon.Shape = Enum.PartType.Ball
+		hazard(structure, CFrame.new(px, 0.9, frontZ + 0.1) * CFrame.Angles(0, math.pi, 0), 4, 1.2, 1)
+	end
+
+	-- overall depot sign carried on the outer piers
+	for _, side in ipairs({ -1, 1 }) do
+		part(structure, "DepotSignPost", v3(0.8, 3.5, 0.8), v3(side * 27, 17.75, frontZ), COLORS.Metal, Enum.Material.Metal)
+	end
+	makeSign(
+		structure,
+		"DepotSign",
+		CFrame.new(0, 20.4, frontZ) * CFrame.Angles(0, math.pi, 0),
+		v3(58, 5, 0.8),
+		"MATCHMAKING DEPOT",
+		"BOARD A TRUCK  •  HOST YOUR OWN LOBBY",
+		COLORS.White
+	)
+
+	for index, def in ipairs(BAYS) do
+		local bx = (index - (count + 1) / 2) * DEPOT.pitch
+		local model = Instance.new("Model")
+		model.Name = def.name
+		model.Parent = lobby
+		model:SetAttribute("BayIndex", index)
+
+		buildHangar(model, def, bx)
+		buildForecourt(model, def, bx)
+
+		-- hangar portal: shutter housing, hazard lip and bay sign
+		part(model, def.name .. "_Lintel", v3(24, 2.6, 1.6), v3(bx, 12.4, mouthZ + 0.3), COLORS.Metal, Enum.Material.Metal)
+		part(model, def.name .. "_LintelGlow", v3(24, 0.2, 0.3), v3(bx, 11, frontZ - 0.1), def.color, Enum.Material.Neon, NOFX)
+		hazard(model, CFrame.new(bx, 11.4, frontZ - 0.12) * CFrame.Angles(0, math.pi, 0), 22, 0.5, 1.5)
+		makeSign(
+			model,
+			def.name .. "_PortalSign",
+			CFrame.new(bx, 15.2, mouthZ + 0.5) * CFrame.Angles(0, math.pi, 0),
+			v3(22, 2.6, 0.6),
+			def.label,
+			"MATCHMAKING BAY",
+			def.color
+		)
+
+		-- the truck is parked in front of the hangar, nose pointing at the exit
+		local origin = v3(bx, 0, DEPOT.truckZ)
+		buildTruck(model, CFrame.lookAt(origin, origin + v3(0, 0, 1)), def)
+
+		local trigger = part(
+			model,
+			def.name .. "_Trigger",
+			v3(22, 7, 20),
+			v3(bx, 3.8, -59),
+			def.color,
+			Enum.Material.SmoothPlastic,
+			{ CanCollide = false, CanTouch = true, CanQuery = true, CastShadow = false, Transparency = 1 }
+		)
+		trigger:SetAttribute("StationId", def.name)
+		trigger:SetAttribute("BayIndex", index)
+
+		model.WorldPivot = CFrame.new(bx, 3, -50)
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -999,7 +1409,7 @@ local function buildMilitary(lobby)
 
 	-- sandbag barricades
 	for _, side in ipairs({ -1, 1 }) do
-		sandbagWall(deco, CFrame.new(side * 66, 0, -52), 6, 3)
+		sandbagWall(deco, CFrame.new(side * 72, 0, -52), 6, 3)
 		sandbagWall(deco, CFrame.new(side * 16, 0, 60), 3, 2)
 	end
 
@@ -1011,8 +1421,6 @@ local function buildMilitary(lobby)
 
 	-- tank traps
 	for _, p in ipairs({
-		Vector3.new(-34, 0, -58),
-		Vector3.new(34, 0, -58),
 		Vector3.new(-28, 0, 60),
 		Vector3.new(28, 0, 60),
 	}) do
@@ -1035,15 +1443,6 @@ local function buildPerimeterSigns(lobby)
 	signs.Name = "PerimeterWayfinding"
 	signs.Parent = lobby
 
-	makeSign(
-		signs,
-		"NorthSectorSign",
-		CFrame.new(-58, 9, -69.1) * CFrame.Angles(0, math.pi, 0),
-		Vector3.new(18, 4.5, 0.5),
-		"SECTOR A-01",
-		"PERIMETER SECURE",
-		COLORS.Blue
-	)
 	makeSign(
 		signs,
 		"SouthSectorSign",
@@ -1121,7 +1520,7 @@ local function buildWallDetails(lobby)
 
 	-- Interior face of every wall is local -Z, matching buildWall.
 	local walls = {
-		{ CFrame.new(0, 0, -71) * CFrame.Angles(0, math.pi, 0), 180, { -72, -36, 36, 72 } },
+		{ CFrame.new(0, 0, -71) * CFrame.Angles(0, math.pi, 0), 180, { -72, 72 } },
 		{ CFrame.new(0, 0, 71), 180, { -48, -24, 0, 24 } },
 		{ CFrame.new(91, 0, 0) * CFrame.Angles(0, math.pi / 2, 0), 140, { -24, 24 } },
 		{ CFrame.new(-91, 0, 0) * CFrame.Angles(0, -math.pi / 2, 0), 140, { -24, 24 } },
@@ -1233,38 +1632,8 @@ local function buildFloorMarkings(lobby)
 end
 
 --------------------------------------------------------------------------------
--- Event board + arrival
+-- Arrival
 --------------------------------------------------------------------------------
-
-local function buildEventBoard(lobby)
-	local m = Instance.new("Model")
-	m.Name = "EventBoardModel"
-	m.Parent = lobby
-
-	-- faces +Z (toward the hub)
-	local cf = CFrame.new(0, 0, -67.8) * CFrame.Angles(0, math.pi, 0)
-
-	local slab = part(m, "EventBoard", Vector3.new(36, 15, 1.2), cf * CFrame.new(0, 8.8, 0), COLORS.Metal, Enum.Material.Metal)
-	addLight(slab, COLORS.Gold, 1.6, 34, 0.1, 1.5)
-
-	-- neon frame
-	part(m, "FrameTop", Vector3.new(36.6, 0.35, 0.5), cf * CFrame.new(0, 16.4, -0.5), COLORS.Gold, Enum.Material.Neon, NOFX)
-	part(m, "FrameBottom", Vector3.new(36.6, 0.35, 0.5), cf * CFrame.new(0, 1.2, -0.5), COLORS.Gold, Enum.Material.Neon, NOFX)
-	for _, x in ipairs({ -18.2, 18.2 }) do
-		part(m, "FrameSide", Vector3.new(0.35, 15.2, 0.5), cf * CFrame.new(x, 8.8, -0.5), COLORS.Gold, Enum.Material.Neon, NOFX)
-	end
-
-	makeSign(m, "EventSign", cf * CFrame.new(0, 12.6, -0.85), Vector3.new(32, 5, 0.3), "EVENTS & REWARDS", "LIMITED-TIME EVENTS  •  DAILY MISSIONS", COLORS.Gold)
-
-	local tiles = {
-		{ "DAILY", COLORS.Green, -10.5 },
-		{ "WEEKLY", COLORS.Blue, 0 },
-		{ "SEASON", COLORS.Purple, 10.5 },
-	}
-	for _, t in ipairs(tiles) do
-		makeSign(m, "EventTile_" .. t[1], cf * CFrame.new(-t[3], 6, -0.85), Vector3.new(9, 4.5, 0.3), t[1], "REWARDS", t[2])
-	end
-end
 
 local function buildArrivalGate(lobby)
 	local gate = Instance.new("Model")
@@ -1421,6 +1790,8 @@ function LobbyBuilder.Build()
 		buildLane(lobby, from, to, def.color)
 		makeStation(lobby, def)
 	end
+	buildSectorArchitecture(lobby)
+	buildMatchBays(lobby)
 
 	-- Props
 	buildMilitary(lobby)
@@ -1428,7 +1799,6 @@ function LobbyBuilder.Build()
 	buildAtmosphericDetails(lobby)
 	buildWallDetails(lobby)
 	buildFloorMarkings(lobby)
-	buildEventBoard(lobby)
 	if CONFIG.ArrivalGate then
 		buildArrivalGate(lobby)
 	end

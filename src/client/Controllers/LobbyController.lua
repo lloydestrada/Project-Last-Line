@@ -151,8 +151,10 @@ local function createInterface()
 end
 
 local STATION_DETAILS = {
-	CreateMatch = "CREATE MATCH",
-	MatchBrowser = "MATCH BROWSER",
+	MatchBay1 = "LOBBY BAY 01",
+	MatchBay2 = "LOBBY BAY 02",
+	MatchBay3 = "LOBBY BAY 03",
+	MatchBay4 = "LOBBY BAY 04",
 	SummoningStation = "SUMMON TURRETS",
 	ShopStation = "SHOP & REWARDS",
 }
