@@ -431,15 +431,49 @@ local function buildLane(parent, from, to, color)
 	end
 end
 
-local function buildWall(lobby, name, placement, length, lightEvery)
+-- `openings` is a symmetric list of { x0, x1 } spans (local wall X) cut through the
+-- wall up to OPENING_HEIGHT, leaving a lintel above them.
+local OPENING_HEIGHT = 13.4
+
+local function buildWall(lobby, name, placement, length, lightEvery, openings)
 	local m = Instance.new("Model")
 	m.Name = name
 	m.Parent = lobby
 
-	part(m, name, Vector3.new(length, 18, 3), placement * CFrame.new(0, 9, 0), COLORS.Wall, Enum.Material.Concrete)
+	openings = openings or {}
+	local function overlapsOpening(x, halfWidth)
+		for _, o in ipairs(openings) do
+			if x + halfWidth > o[1] and x - halfWidth < o[2] then
+				return true
+			end
+		end
+		return false
+	end
+
+	-- solid wall intervals between the openings
+	local solids = {}
+	local cursor = -length / 2
+	for _, o in ipairs(openings) do
+		if o[1] > cursor then
+			solids[#solids + 1] = { cursor, o[1] }
+		end
+		cursor = o[2]
+	end
+	solids[#solids + 1] = { cursor, length / 2 }
+
+	for index, s in ipairs(solids) do
+		local width, center = s[2] - s[1], (s[1] + s[2]) / 2
+		part(m, name, Vector3.new(width, 18, 3), placement * CFrame.new(center, 9, 0), COLORS.Wall, Enum.Material.Concrete)
+		part(m, "Plinth", Vector3.new(width, 1.5, 4), placement * CFrame.new(center, 0.75, -0.5), COLORS.Metal, Enum.Material.Metal)
+		if width > 8 then
+			hazard(m, placement * CFrame.new(center, 0.75, -2.56), width - (index == 1 and 6 or 2), 1.2, 2.5)
+		end
+	end
+	for _, o in ipairs(openings) do
+		local height = 18 - OPENING_HEIGHT
+		part(m, name .. "_Lintel", Vector3.new(o[2] - o[1], height, 3), placement * CFrame.new((o[1] + o[2]) / 2, OPENING_HEIGHT + height / 2, 0), COLORS.Wall, Enum.Material.Concrete)
+	end
 	part(m, "Cornice", Vector3.new(length + 1, 1.2, 4.2), placement * CFrame.new(0, 18.2, 0), COLORS.Metal, Enum.Material.Metal)
-	part(m, "Plinth", Vector3.new(length, 1.5, 4), placement * CFrame.new(0, 0.75, -0.5), COLORS.Metal, Enum.Material.Metal)
-	hazard(m, placement * CFrame.new(0, 0.75, -2.56), length - 6, 1.2, 2.5)
 
 	-- neon band
 	part(m, "WallBand", Vector3.new(length - 2, 0.3, 0.25), placement * CFrame.new(0, 15.2, -1.7), COLORS.Blue, Enum.Material.Neon, NOFX)
@@ -448,13 +482,15 @@ local function buildWall(lobby, name, placement, length, lightEvery)
 	local count = math.floor((length - 12) / 24)
 	for i = 0, count - 1 do
 		local x = (i - (count - 1) / 2) * 24
-		part(m, "WallPanel", Vector3.new(12, 9, 0.3), placement * CFrame.new(x, 9, -1.65), COLORS.Panel, Enum.Material.Metal)
-		for _, s in ipairs({ -6, 6 }) do
-			part(m, "PanelStrip", Vector3.new(0.25, 9, 0.2), placement * CFrame.new(x + s, 9, -1.75), COLORS.Blue, Enum.Material.Neon, { CanCollide = false, Transparency = 0.3 })
+		if not overlapsOpening(x, 6.3) then
+			part(m, "WallPanel", Vector3.new(12, 9, 0.3), placement * CFrame.new(x, 9, -1.65), COLORS.Panel, Enum.Material.Metal)
+			for _, s in ipairs({ -6, 6 }) do
+				part(m, "PanelStrip", Vector3.new(0.25, 9, 0.2), placement * CFrame.new(x + s, 9, -1.75), COLORS.Blue, Enum.Material.Neon, { CanCollide = false, Transparency = 0.3 })
+			end
 		end
 
 		-- lamp fixtures in the gaps between panels
-		if i < count - 1 then
+		if i < count - 1 and not overlapsOpening(x + 12, 3.3) then
 			local lamp = part(m, "WallLight", Vector3.new(6, 0.6, 0.5), placement * CFrame.new(x + 12, 12.5, -1.9), COLORS.White, Enum.Material.Neon, NOFX)
 			if i % lightEvery == 0 then
 				addLight(lamp, COLORS.Blue, 1.4, 24, 0.08, 1.5)
@@ -903,9 +939,12 @@ local v3 = Vector3.new
 
 local DEPOT = {
 	backZ = -69.5, -- interior face of the north wall
+	outerZ = -72.5, -- exterior face of the north wall
 	mouthZ = -47.5, -- front opening of every hangar
 	pitch = 28, -- distance between bay centres
-	truckZ = -36.5, -- truck origin; trucks face south (+Z) toward the exit
+	truckZ = -83.8, -- truck origin, parked outside the wall with its nose pointing north
+	truckY = 0.3, -- dock floor height
+	yardEndZ = -114, -- far edge of the exterior truck yard
 }
 
 local BAYS = {
@@ -914,6 +953,21 @@ local BAYS = {
 	{ name = "MatchBay3", label = "LOBBY 03", color = COLORS.Orange, paint = Color3.fromRGB(78, 62, 46), roof = "turret" },
 	{ name = "MatchBay4", label = "LOBBY 04", color = COLORS.Red, paint = Color3.fromRGB(70, 48, 54), roof = "antenna" },
 }
+
+local function bayCenterX(index)
+	return (index - (#BAYS + 1) / 2) * DEPOT.pitch
+end
+
+-- Spans cut through the north wall behind every hangar (the layout is symmetric,
+-- so the same spans are valid in the wall's mirrored local space).
+local function bayOpenings()
+	local openings = {}
+	for index = 1, #BAYS do
+		local bx = bayCenterX(index)
+		openings[#openings + 1] = { bx - 12, bx + 12 }
+	end
+	return openings
+end
 
 local function surfaceLabel(part0, face, text, color, size)
 	local gui = Instance.new("SurfaceGui")
@@ -1057,14 +1111,31 @@ local function buildTruck(parent, base, def)
 		surfaceLabel(plate, (side == 1) and Enum.NormalId.Right or Enum.NormalId.Left, def.label, color, UDim2.fromScale(0.92, 0.5))
 	end
 
-	-- rear doors and tail lights face the hangar
-	part(truck, "RearDoors", v3(7.4, 5.2, 0.2), L(0, 5.5, 8.95), COLORS.Dark, Enum.Material.Metal)
+	-- rear doors and tail lights face the hangar, so this is the side players see
+	local doors = part(truck, "RearDoors", v3(7.4, 5.2, 0.2), L(0, 5.5, 8.95), COLORS.Dark, Enum.Material.Metal)
 	part(truck, "RearSeam", v3(0.1, 5, 0.1), L(0, 5.5, 9.08), color, Enum.Material.Neon, NOFX)
+	part(truck, "RearFrame", v3(7.6, 0.2, 0.3), L(0, 8.15, 9.0), color, Enum.Material.Neon, NOFX)
+	part(truck, "RearFrame", v3(7.6, 0.2, 0.3), L(0, 2.9, 9.0), color, Enum.Material.Neon, NOFX)
 	for _, side in ipairs({ -1, 1 }) do
+		part(truck, "RearFrame", v3(0.2, 5.4, 0.3), L(side * 3.7, 5.5, 9.0), color, Enum.Material.Neon, NOFX)
 		part(truck, "TailLight", v3(0.9, 0.5, 0.2), L(side * 3.0, 3.3, 9.05), COLORS.Red, Enum.Material.Neon, NOFX)
+		part(truck, "DoorHandle", v3(0.18, 1.6, 0.25), L(side * 0.55, 5.3, 9.2), COLORS.Metal, Enum.Material.Metal, NOFX)
+		part(truck, "DoorHinge", v3(0.3, 0.5, 0.2), L(side * 3.4, 7.2, 9.1), COLORS.Metal, Enum.Material.Metal, NOFX)
+		part(truck, "DoorHinge", v3(0.3, 0.5, 0.2), L(side * 3.4, 3.8, 9.1), COLORS.Metal, Enum.Material.Metal, NOFX)
+		part(truck, "ReflectiveStrip", v3(0.9, 0.18, 0.1), L(side * 2.4, 3.15, 9.15), COLORS.White, Enum.Material.SmoothPlastic, NOFX)
 	end
+
+	local doorLabel = surfaceLabel(doors, Enum.NormalId.Back, def.label, color, UDim2.fromScale(0.8, 0.2))
+	doorLabel.Position = UDim2.fromScale(0.1, 0.16)
+	local doorTag = surfaceLabel(doors, Enum.NormalId.Back, "LAST HOUSE  /  MOBILE LOBBY", COLORS.White, UDim2.fromScale(0.8, 0.07))
+	doorTag.Position = UDim2.fromScale(0.1, 0.42)
+	doorTag.Font = Enum.Font.GothamBold
+	local plate = part(truck, "LicensePlate", v3(2.2, 0.7, 0.1), L(0, 3.7, 9.22), COLORS.White, Enum.Material.SmoothPlastic, NOFX)
+	surfaceLabel(plate, Enum.NormalId.Back, "LH-" .. string.match(def.name, "%d+"), COLORS.Dark)
 	part(truck, "RearBumper", v3(7.8, 0.7, 0.7), L(0, 2.2, 9.2), COLORS.Dark, Enum.Material.Metal)
 	hazard(truck, L(0, 2.2, 9.57) * CFrame.Angles(0, math.pi, 0), 7.6, 0.6, 1.9)
+	local rearLamp = part(truck, "RearWorkLight", v3(1.2, 0.3, 0.3), L(0, 8.5, 9.1), COLORS.Warm, Enum.Material.Neon, NOFX)
+	addLight(rearLamp, COLORS.Warm, 0.9, 18, 0.05, 1.2)
 
 	buildTruckRoofGear(truck, L, def)
 	return truck
@@ -1077,13 +1148,16 @@ local function buildHangar(model, def, bx)
 	local depth = mouthZ - backZ
 	local midZ = (backZ + mouthZ) / 2
 
-	-- floor
-	part(model, name .. "_HangarFloor", v3(24, 0.3, depth), v3(bx, 0.15, midZ), COLORS.Dark, Enum.Material.Metal)
-	part(model, name .. "_HangarInlay", v3(22.4, 0.06, depth - 1.6), v3(bx, 0.33, midZ), COLORS.Floor, Enum.Material.DiamondPlate, NOFX)
+	-- floor (continues through the wall opening so the truck sits on the same deck)
+	local floorDepth = mouthZ - DEPOT.outerZ
+	local floorMid = (DEPOT.outerZ + mouthZ) / 2
+	part(model, name .. "_HangarFloor", v3(24, 0.3, floorDepth), v3(bx, 0.15, floorMid), COLORS.Dark, Enum.Material.Metal)
+	part(model, name .. "_HangarInlay", v3(22.4, 0.06, floorDepth - 1.6), v3(bx, 0.33, floorMid), COLORS.Floor, Enum.Material.DiamondPlate, NOFX)
 	for _, side in ipairs({ -1, 1 }) do
-		part(model, name .. "_FloorEdge", v3(0.3, 0.06, depth - 1), v3(bx + side * 11.6, 0.37, midZ), color, Enum.Material.Neon, NOFX)
+		part(model, name .. "_FloorEdge", v3(0.3, 0.06, floorDepth - 1), v3(bx + side * 11.6, 0.37, floorMid), color, Enum.Material.Neon, NOFX)
 	end
 	part(model, name .. "_Threshold", v3(24, 0.06, 0.35), v3(bx, 0.37, mouthZ + 0.6), color, Enum.Material.Neon, NOFX)
+	part(model, name .. "_DockSill", v3(24, 0.06, 0.4), v3(bx, 0.37, DEPOT.outerZ + 0.4), color, Enum.Material.Neon, NOFX)
 
 	-- roof, beams and lighting
 	part(model, name .. "_HangarRoof", v3(24, 1.2, depth), v3(bx, 14, midZ), COLORS.Wall, Enum.Material.Metal)
@@ -1094,31 +1168,37 @@ local function buildHangar(model, def, bx)
 	local lamp = part(model, name .. "_HangarLamp", v3(3, 0.2, 3), v3(bx, 13.3, midZ), COLORS.Warm, Enum.Material.Neon, NOFX)
 	addLight(lamp, COLORS.Warm, 1.1, 30, 0.06, 1.4)
 
-	-- back wall with the bay's call sign
-	part(model, name .. "_BackWall", v3(23.6, 12.6, 0.4), v3(bx, 6.6, -68.6), COLORS.Panel, Enum.Material.Metal)
+	-- opening frame where the hangar meets the truck yard
 	for _, side in ipairs({ -1, 1 }) do
-		part(model, name .. "_BackStrip", v3(0.25, 11, 0.2), v3(bx + side * 11.2, 6.6, -68.35), color, Enum.Material.Neon, NOFX)
+		part(model, name .. "_OpeningTrim", v3(0.3, 13, 0.3), v3(bx + side * 11.9, 6.9, DEPOT.backZ + 0.2), color, Enum.Material.Neon, NOFX)
+	end
+	part(model, name .. "_OpeningTrim", v3(24, 0.3, 0.3), v3(bx, OPENING_HEIGHT - 0.1, DEPOT.backZ + 0.2), color, Enum.Material.Neon, NOFX)
+
+	-- call sign hanging above the truck's roofline, readable from the base
+	for _, side in ipairs({ -1, 1 }) do
+		part(model, name .. "_SignCable", v3(0.15, 1.2, 0.15), v3(bx + side * 6.5, 12.7, -65.5), COLORS.Dark, Enum.Material.Metal, NOFX)
 	end
 	makeSign(
 		model,
 		name .. "_BackSign",
-		CFrame.new(bx, 9.4, -68.3) * CFrame.Angles(0, math.pi, 0),
-		v3(16, 3.4, 0.3),
+		CFrame.new(bx, 10.9, -65.5) * CFrame.Angles(0, math.pi, 0),
+		v3(15, 3, 0.3),
 		"CREATE LOBBY",
 		"STEP INTO THE RING TO HOST",
 		color
 	)
 
-	-- lobby terminal
-	part(model, name .. "_Console", v3(9, 2.4, 3), v3(bx, 1.5, -66.2), COLORS.Metal, Enum.Material.Metal)
-	part(model, name .. "_ConsoleTop", v3(9.6, 0.3, 3.6), v3(bx, 2.85, -66.2), COLORS.Wall, Enum.Material.Metal)
-	part(model, name .. "_ConsoleGlow", v3(9, 0.16, 0.12), v3(bx, 1.7, -64.65), color, Enum.Material.Neon, NOFX)
-	part(model, name .. "_TerminalStem", v3(1, 0.8, 0.8), v3(bx, 3.4, -66.5), COLORS.Dark, Enum.Material.Metal)
+	-- lobby terminal, set against the left pier so the truck stays in view
+	local terminalBase = CFrame.new(bx - 10.3, 0, -58.5) * CFrame.Angles(0, -math.pi / 2, 0)
+	part(model, name .. "_Console", v3(7, 2.4, 2.4), terminalBase * CFrame.new(0, 1.5, 0), COLORS.Metal, Enum.Material.Metal)
+	part(model, name .. "_ConsoleTop", v3(7.5, 0.3, 2.9), terminalBase * CFrame.new(0, 2.85, 0), COLORS.Wall, Enum.Material.Metal)
+	part(model, name .. "_ConsoleGlow", v3(7, 0.16, 0.12), terminalBase * CFrame.new(0, 1.7, -1.25), color, Enum.Material.Neon, NOFX)
+	part(model, name .. "_TerminalStem", v3(1, 0.8, 0.8), terminalBase * CFrame.new(0, 3.4, 0.4), COLORS.Dark, Enum.Material.Metal)
 	makeSign(
 		model,
 		name .. "_Terminal",
-		CFrame.new(bx, 4.5, -66.3) * CFrame.Angles(0, math.pi, 0) * CFrame.Angles(math.rad(15), 0, 0),
-		v3(6, 2.6, 0.25),
+		terminalBase * CFrame.new(0, 4.5, 0.2) * CFrame.Angles(math.rad(15), 0, 0),
+		v3(5.6, 2.6, 0.25),
 		"HOST LOBBY",
 		"0 / 4 SQUAD",
 		color
@@ -1180,22 +1260,21 @@ local function buildHangar(model, def, bx)
 	sparkles(model, v3(bx, 1, -58.5), v3(8, 1, 8), color, 5, 2)
 end
 
--- Open forecourt in front of the hangar where the truck is parked
+-- Short approach walkway in front of each hangar, chevrons point into the hangar
 local function buildForecourt(model, def, bx)
 	local name, color = def.name, def.color
-	local frontZ = -24.5
+	local frontZ = -37
 	local length = frontZ - DEPOT.mouthZ
 	local midZ = (frontZ + DEPOT.mouthZ) / 2
 
 	part(model, name .. "_Forecourt", v3(24, 0.14, length), v3(bx, 0.07, midZ), Color3.fromRGB(34, 38, 44), Enum.Material.Metal, NOFX)
 	for _, side in ipairs({ -1, 1 }) do
 		part(model, name .. "_CourtEdge", v3(0.3, 0.05, length), v3(bx + side * 11.7, 0.16, midZ), color, Enum.Material.Neon, NOFX)
-		-- bollards at the exit end
 		part(model, name .. "_Bollard", v3(0.7, 2.2, 0.7), v3(bx + side * 11.4, 1.1, frontZ + 0.5), COLORS.Metal, Enum.Material.Metal)
 		part(model, name .. "_BollardCap", v3(0.8, 0.25, 0.8), v3(bx + side * 11.4, 2.3, frontZ + 0.5), color, Enum.Material.Neon, NOFX)
 	end
 
-	-- hazard stop line at the exit end
+	-- hazard line marking the start of the bay
 	for k = 0, 9 do
 		part(
 			model,
@@ -1208,13 +1287,12 @@ local function buildForecourt(model, def, bx)
 		)
 	end
 
-	-- exit chevrons on the left walkway, bay number on the right
-	local chevronPos = v3(bx - 8.2, 0.16, -32)
-	local chevronCF = CFrame.lookAt(chevronPos, chevronPos + v3(0, 0, 1))
+	local chevronPos = v3(bx - 5, 0.16, -42)
+	local chevronCF = CFrame.lookAt(chevronPos, chevronPos + v3(0, 0, -1))
 	for _, side in ipairs({ -1, 1 }) do
 		part(
 			model,
-			name .. "_ExitChevron",
+			name .. "_EntryChevron",
 			v3(2.4, 0.05, 0.28),
 			chevronCF * CFrame.new(side * 0.6, 0, 0) * CFrame.Angles(0, side * math.rad(34), 0),
 			color,
@@ -1222,9 +1300,114 @@ local function buildForecourt(model, def, bx)
 			NOFX
 		)
 	end
-	local number = part(model, name .. "_BayNumber", v3(5, 0.05, 3), v3(bx + 8.2, 0.17, -32), COLORS.Dark, Enum.Material.SmoothPlastic, NOFX)
+	local number = part(model, name .. "_BayNumber", v3(5, 0.05, 3), v3(bx + 5, 0.17, -42), COLORS.Dark, Enum.Material.SmoothPlastic, NOFX)
 	number.Transparency = 1
 	surfaceLabel(number, Enum.NormalId.Top, string.format("%02d", tonumber(string.match(name, "%d+"))), color)
+end
+
+-- Exterior road and loading yard north of the wall. Trucks park here with their
+-- noses pointing out toward the exit road.
+local function buildTruckYard(lobby)
+	local yard = Instance.new("Folder")
+	yard.Name = "TruckYard"
+	yard.Parent = lobby
+
+	local outerZ, endZ = DEPOT.outerZ, DEPOT.yardEndZ
+	local length = outerZ - endZ
+	local midZ = (outerZ + endZ) / 2
+	local asphalt = Color3.fromRGB(32, 35, 40)
+
+	part(yard, "YardSlab", v3(180, 0.3, length), v3(0, 0.15, midZ), asphalt, Enum.Material.Asphalt)
+
+	-- exit road running east-west in front of the trucks
+	local roadZ = -106
+	part(yard, "ExitRoad", v3(176, 0.06, 7.5), v3(0, 0.33, roadZ), Color3.fromRGB(24, 26, 30), Enum.Material.Asphalt, NOFX)
+	for _, side in ipairs({ -1, 1 }) do
+		part(yard, "RoadEdge", v3(176, 0.06, 0.3), v3(0, 0.37, roadZ + side * 3.6), COLORS.White, Enum.Material.Neon, { CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false, Transparency = 0.45 })
+	end
+	for x = -84, 84, 8 do
+		part(yard, "RoadDash", v3(3.6, 0.06, 0.4), v3(x, 0.37, roadZ), COLORS.Hazard, Enum.Material.Neon, NOFX)
+	end
+
+	-- perimeter: concrete base with a steel fence so players stay inside the yard
+	local function fence(name, size, pos, color)
+		part(yard, name, v3(size.X, 4.5, size.Z), pos + v3(0, 2.4, 0), COLORS.Wall, Enum.Material.Concrete)
+		part(yard, name .. "Fence", v3(size.X, 5, size.Z), pos + v3(0, 7.15, 0), COLORS.Dark, Enum.Material.Metal, { Transparency = 0.55 })
+		part(yard, name .. "Cap", v3(size.X + 0.3, 0.3, size.Z + 0.3), pos + v3(0, 9.8, 0), color, Enum.Material.Neon, NOFX)
+	end
+	fence("NorthBarrier", v3(180, 0, 1.4), v3(0, 0, endZ + 0.7), COLORS.Blue)
+	fence("WestBarrier", v3(1.4, 0, length), v3(-90.2, 0, midZ), COLORS.Blue)
+	fence("EastBarrier", v3(1.4, 0, length), v3(90.2, 0, midZ), COLORS.Blue)
+	makeSign(
+		yard,
+		"ExitRouteSign",
+		CFrame.new(0, 7.8, endZ + 1.5) * CFrame.Angles(0, math.pi, 0),
+		v3(26, 3.4, 0.4),
+		"NORTH EXIT ROUTE",
+		"MOBILE LOBBIES DEPART HERE",
+		COLORS.Hazard
+	)
+
+	-- floodlight poles between the trucks
+	for i = 0, #BAYS do
+		local px = (i - #BAYS / 2) * DEPOT.pitch
+		part(yard, "LightPole", v3(0.7, 15, 0.7), v3(px, 7.8, -80), COLORS.Metal, Enum.Material.Metal)
+		part(yard, "LightPoleBase", v3(2, 0.8, 2), v3(px, 0.7, -80), COLORS.Dark, Enum.Material.Metal)
+		part(yard, "LightArm", v3(0.4, 0.4, 5), v3(px, 15.2, -82.5), COLORS.Metal, Enum.Material.Metal)
+		local lamp = part(yard, "LightHead", v3(3, 0.4, 2.2), v3(px, 14.8, -84.5), COLORS.Warm, Enum.Material.Neon, NOFX)
+		addLight(lamp, COLORS.Warm, 1, 34, 0.04, 1.3)
+	end
+
+	for index, def in ipairs(BAYS) do
+		local bx = bayCenterX(index)
+		local color = def.color
+
+		-- bay lane and ground markings
+		for _, side in ipairs({ -1, 1 }) do
+			part(yard, def.name .. "_LaneEdge", v3(0.3, 0.06, 32), v3(bx + side * 11.7, 0.34, -89), color, Enum.Material.Neon, NOFX)
+			part(yard, def.name .. "_OpeningTrim", v3(0.3, OPENING_HEIGHT, 0.3), v3(bx + side * 11.9, OPENING_HEIGHT / 2, outerZ - 0.2), color, Enum.Material.Neon, NOFX)
+		end
+		part(yard, def.name .. "_OpeningTrim", v3(24, 0.3, 0.3), v3(bx, OPENING_HEIGHT - 0.1, outerZ - 0.2), color, Enum.Material.Neon, NOFX)
+
+		local chevronPos = v3(bx, 0.36, -99)
+		local chevronCF = CFrame.lookAt(chevronPos, chevronPos + v3(0, 0, -1))
+		for _, offset in ipairs({ 0, -3.5 }) do
+			for _, side in ipairs({ -1, 1 }) do
+				part(
+					yard,
+					def.name .. "_ExitChevron",
+					v3(3.2, 0.05, 0.36),
+					chevronCF * CFrame.new(side * 0.8, 0, -offset) * CFrame.Angles(0, side * math.rad(34), 0),
+					color,
+					Enum.Material.Neon,
+					NOFX
+				)
+			end
+		end
+		local number = part(yard, def.name .. "_BayNumber", v3(9, 0.05, 6), v3(bx, 0.36, -102.5), COLORS.Dark, Enum.Material.SmoothPlastic, NOFX)
+		number.Transparency = 1
+		surfaceLabel(number, Enum.NormalId.Top, string.format("%02d", index), color)
+
+		-- exterior bay sign and floodlight over the opening
+		makeSign(
+			yard,
+			def.name .. "_OuterSign",
+			CFrame.new(bx, 15.7, outerZ - 0.4),
+			v3(20, 2.6, 0.4),
+			def.label,
+			"MOBILE LOBBY  •  ROLL OUT",
+			color
+		)
+		local fixture = part(yard, def.name .. "_Floodlight", v3(6, 0.5, 0.9), v3(bx, 13.1, outerZ - 0.9), COLORS.Warm, Enum.Material.Neon, NOFX)
+		local spot = Instance.new("SpotLight")
+		spot.Face = Enum.NormalId.Front
+		spot.Angle = 80
+		spot.Range = 40
+		spot.Brightness = 1.2
+		spot.Color = COLORS.Warm
+		spot.Shadows = false
+		spot.Parent = fixture
+	end
 end
 
 local function buildMatchBays(lobby)
@@ -1293,9 +1476,10 @@ local function buildMatchBays(lobby)
 			def.color
 		)
 
-		-- the truck is parked in front of the hangar, nose pointing at the exit
-		local origin = v3(bx, 0, DEPOT.truckZ)
-		buildTruck(model, CFrame.lookAt(origin, origin + v3(0, 0, 1)), def)
+		-- the truck is parked outside the wall, nose pointing north to the exit road,
+		-- so its rear doors face into the hangar
+		local origin = v3(bx, DEPOT.truckY, DEPOT.truckZ)
+		buildTruck(model, CFrame.lookAt(origin, origin + v3(0, 0, -1)), def)
 
 		local trigger = part(
 			model,
@@ -1311,6 +1495,8 @@ local function buildMatchBays(lobby)
 
 		model.WorldPivot = CFrame.new(bx, 3, -50)
 	end
+
+	buildTruckYard(lobby)
 end
 
 --------------------------------------------------------------------------------
@@ -1765,7 +1951,7 @@ function LobbyBuilder.Build()
 
 	-- Structure
 	buildFloor(lobby)
-	buildWall(lobby, "NorthWall", CFrame.new(0, 0, -71) * CFrame.Angles(0, math.pi, 0), 180, 2)
+	buildWall(lobby, "NorthWall", CFrame.new(0, 0, -71) * CFrame.Angles(0, math.pi, 0), 180, 2, bayOpenings())
 	buildWall(lobby, "SouthWall", CFrame.new(0, 0, 71), 180, 2)
 	buildWall(lobby, "EastWall", CFrame.new(91, 0, 0) * CFrame.Angles(0, math.pi / 2, 0), 140, 2)
 	buildWall(lobby, "WestWall", CFrame.new(-91, 0, 0) * CFrame.Angles(0, -math.pi / 2, 0), 140, 2)
